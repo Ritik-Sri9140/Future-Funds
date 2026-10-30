@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import app.news as news
 
@@ -122,4 +122,41 @@ def test_upstream_failure_is_not_cached(monkeypatch):
         pass
     else:
         raise AssertionError("expected NewsUpstreamError")
+    assert calls["n"] == 2
+
+
+def test_demo_stories_cover_today_and_yesterday_in_both_regions():
+    now = datetime(2026, 10, 14, 9, 15, tzinfo=timezone.utc)
+    body = news.demo_feed(now=now, tz_offset_minutes=-330)
+    assert body["demo"] is True
+    assert body["configured"] is True
+    days = set()
+    scopes = set()
+    for item in body["articles"]:
+        assert item["title"] and item["url"] and item["id"]
+        published = datetime.fromisoformat(item["publishedAt"])
+        local = published.astimezone(timezone.utc) + timedelta(minutes=330)
+        days.add(local.strftime("%Y-%m-%d"))
+        scopes.add(item["scope"])
+    assert days == {"2026-10-14", "2026-10-13"}
+    assert scopes == {"in", "global"}
+
+
+def test_any_failure_serves_demo_without_caching_it(monkeypatch):
+    monkeypatch.setenv("MARKETAUX_API_TOKEN", "test-token")
+    news.clear_cache()
+    calls = {"n": 0}
+
+    def fetch(params):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("unexpected bug")
+        raise news.NewsUpstreamError("down")
+
+    monkeypatch.setattr(news, "_fetch", fetch)
+    first = news.load_news_or_demo()
+    second = news.load_news_or_demo()
+    assert first["demo"] is True
+    assert second["demo"] is True
+    assert {item["scope"] for item in first["articles"]} == {"in", "global"}
     assert calls["n"] == 2

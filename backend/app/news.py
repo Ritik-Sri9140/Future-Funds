@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
 
 PAGE_LIMIT = 3  # free plan maximum
 MAX_PAGES = 4  # per local day, so yesterday is not crowded out by today
@@ -181,3 +184,71 @@ def load_news(
         with _lock:
             _cache = {"at": moment.timestamp(), "key": cache_key, "body": body}
     return body
+
+
+def local_published_at(now: datetime, tz_offset_minutes: int, days_ago: int, hour: int = 8) -> str:
+    """UTC timestamp that falls on a local calendar day in the browser's zone."""
+    offset = clamp_offset(tz_offset_minutes)
+    now_utc = now.astimezone(timezone.utc).replace(microsecond=0)
+    local_now = now_utc + timedelta(minutes=-offset)
+    local_stamp = local_now.replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=days_ago)
+    utc_stamp = local_stamp + timedelta(minutes=offset)
+    return utc_stamp.astimezone(timezone.utc).isoformat()
+
+
+_DEMO_STORIES = (
+    ("demo-rbi-hold", "in", 0, "RBI holds the policy rate as retail inflation cools",
+     "A sample headline: the policy rate stays put while inflation eases, and bond yields slip."),
+    ("demo-global-earnings", "global", 0, "Global stocks steady ahead of major earnings",
+     "A sample headline: markets pause as investors wait for results from the largest companies."),
+    ("demo-nifty-banks", "in", 1, "Bank and IT shares lift the Nifty and Sensex",
+     "A sample headline: domestic benchmarks close higher, led by banks and technology."),
+    ("demo-crude-eases", "global", 1, "Crude oil eases, supporting Asian currencies",
+     "A sample headline: cheaper oil takes pressure off currencies that rely on energy imports."),
+)
+
+
+def demo_feed(*, now: datetime | None = None, tz_offset_minutes: int = DEFAULT_TZ_OFFSET) -> dict:
+    """Sample India and global headlines for today and yesterday."""
+    moment = now or datetime.now(timezone.utc)
+    offset = clamp_offset(tz_offset_minutes)
+    articles = [
+        {
+            "id": article_id,
+            "title": title,
+            "summary": summary,
+            "source": "Future Funds demo",
+            "url": f"https://example.com/future-funds/demo/{article_id}",
+            "imageUrl": None,
+            "publishedAt": local_published_at(moment, offset, days_ago),
+            "scope": scope,
+        }
+        for article_id, scope, days_ago, title, summary in _DEMO_STORIES
+    ]
+    articles.sort(key=lambda item: item["publishedAt"], reverse=True)
+    return {
+        "configured": True,
+        "demo": True,
+        "articles": articles,
+        "fetchedAt": moment.astimezone(timezone.utc).isoformat(),
+    }
+
+
+def load_news_or_demo(
+    *,
+    fetch=None,
+    now: datetime | None = None,
+    use_cache: bool = True,
+    tz_offset_minutes: int = DEFAULT_TZ_OFFSET,
+) -> dict:
+    """Live Marketaux headlines, or demo headlines when that load fails."""
+    try:
+        return load_news(
+            fetch=fetch,
+            now=now,
+            use_cache=use_cache,
+            tz_offset_minutes=tz_offset_minutes,
+        )
+    except Exception:
+        logger.exception("Financial news failed; serving demo headlines")
+        return demo_feed(now=now, tz_offset_minutes=tz_offset_minutes)

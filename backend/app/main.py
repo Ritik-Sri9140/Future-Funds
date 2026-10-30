@@ -14,7 +14,7 @@ app = FastAPI(title="Future Funds API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,10 +32,7 @@ def health() -> dict:
 
 @app.get("/api/news")
 def market_news(tz_offset_minutes: int = news.DEFAULT_TZ_OFFSET) -> dict:
-    try:
-        return news.load_news(tz_offset_minutes=tz_offset_minutes)
-    except news.NewsUpstreamError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return news.load_news_or_demo(tz_offset_minutes=tz_offset_minutes)
 
 
 @app.post("/api/calc/goal")
@@ -51,7 +48,7 @@ def calc_monte_carlo(req: MonteCarloRequest) -> dict:
 @app.post("/api/advisor/chat", response_model=ChatResponse)
 def advisor_chat(req: ChatRequest) -> ChatResponse:
     try:
-        reply = advisor.chat([m.model_dump() for m in req.messages], req.plan)
+        reply, source = advisor.chat_result([m.model_dump() for m in req.messages], req.plan, req.language)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Advisor error: {exc}") from exc
-    return ChatResponse(reply=reply)
+    return ChatResponse(reply=reply, source=source, provider=advisor.provider())

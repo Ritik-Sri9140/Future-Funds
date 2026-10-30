@@ -50,6 +50,17 @@ def _inr(v: float) -> str:
     return f"{sign}₹{n:,}"
 
 
+def _about_tax(question: str) -> bool:
+    markers = (
+        "80c", "80 c", "deduction", "income tax", "tax saving", "tax save",
+        "old regime", "new regime", "tax",
+        "टैक्स", "आयकर", "कर बचत", "धारा 80",
+        "పన్ను", "வரி", "আয়কর", "কর সাশ্রয়",
+        "ತೆರಿಗೆ", "നികുതി", "આવકવેરો", "ଆୟକର", "ਟੈਕਸ",
+    )
+    return any(marker in question for marker in markers)
+
+
 def answer_from_plan(question: str, plan: dict) -> str:
     """Numbers-only reply used when the selected model is not connected."""
     q = (question or "").lower()
@@ -57,18 +68,39 @@ def answer_from_plan(question: str, plan: dict) -> str:
     fixes = list(plan.get("suggestedFixes") or [])
     profile = plan.get("profile") or {}
     status = {"on-track": "on track", "partial": "partly funded", "unfunded": "not funded", "done": "fully saved"}
-    if any(w in q for w in ("gap", "short", "close", "fix")):
+    gap_words = (
+        "gap", "short", "close", "fix",
+        "कमी", "अंतर", "లోటు", "இடைவெளி", "குறை",
+        "ঘাটতি", "तूट", "ಕೊರತೆ", "കുറവ്", "ખોટ", "ଘାଟ", "ਘਾਟ",
+    )
+    first_words = (
+        "first", "priorit", "order",
+        "पहले", "प्राथमिक", "మొదట", "ప్రాధాన్య", "முதல்", "முன்னுரிமை",
+        "আগে", "অগ্রাধিকার", "आधी", "प्राधान्य", "ಮೊದಲು", "ಆದ್ಯತೆ",
+        "ആദ്യം", "മുൻഗണന", "પહેલા", "પ્રાથમિકતા", "ପ୍ରଥମେ", "ପ୍ରାଥମିକତା",
+        "ਪਹਿਲਾਂ", "ਤਰਜੀਹ",
+    )
+    emergency_words = (
+        "emergency", "आपात", "इमरजेंसी", "అత్యవసర", "அவசர",
+        "জরুরি", "आणीबाणी", "ತುರ್ತು", "അടിയന്തര", "કટોકટી", "ଜରୁରୀ", "ਐਮਰਜੈਂਸੀ",
+    )
+    if _about_tax(q):
+        body = (
+            "Section 80C is handled on the Tax save & reduce page. "
+            "It uses the tax regime and the amounts you enter there. This chat does not estimate tax."
+        )
+    elif any(w in q for w in gap_words):
         lines = []
         for fix in fixes:
             lines.append(f"• {fix}" if isinstance(fix, str) else f"• {fix.get('title', fix)}")
         body = "\n".join(lines) or "You have no gap right now."
-    elif any(w in q for w in ("first", "priorit", "order")):
+    elif any(w in q for w in first_words):
         ranked = sorted(goals, key=lambda g: g.get("priorityRank") or 99)
         body = "\n".join(
             f"{g.get('priorityRank')}. {g.get('name')}: {_inr(g.get('monthlySipNeeded') or 0)}/mo ({status.get(g.get('status'), g.get('status'))})"
             for g in ranked
         ) or "Add a goal to rank them."
-    elif "emergency" in q:
+    elif any(w in q for w in emergency_words):
         spend = (profile.get("monthlyExpenses") or 0) + (profile.get("emis") or 0)
         body = f"A 6-month emergency fund for you is {_inr(6 * spend)}. You hold {_inr(profile.get('cashSavings') or 0)} in cash."
     else:
@@ -81,13 +113,36 @@ def answer_from_plan(question: str, plan: dict) -> str:
     return f"{body}\n\n(Answered from your plan by the finance engine. {_setup_hint()})"
 
 
+def system_for(language: str | None) -> str:
+    code = language if language in ("en", "hi", "te", "ta", "bn", "mr", "kn", "ml", "gu", "or", "pa") else "en"
+    names = {
+        "en": "English",
+        "hi": "Hindi",
+        "te": "Telugu",
+        "ta": "Tamil",
+        "bn": "Bengali",
+        "mr": "Marathi",
+        "kn": "Kannada",
+        "ml": "Malayalam",
+        "gu": "Gujarati",
+        "or": "Odia",
+        "pa": "Punjabi",
+    }
+    return (
+        SYSTEM
+        + f"\n- Reply in {names[code]}. Keep SIP, EMI, and FD in Latin letters. "
+        + "Use Western digits (0-9) and the ₹ sign. Leave the user's own goal names as given."
+    )
+
+
 SYSTEM = """You are the Future Funds financial planning advisor for users in India.
 Rules:
 - Never calculate numbers yourself. Use the tools for every figure (future cost, SIP, probability, delay cost).
 - Use get_plan_summary first to see the user's profile, goals, priorities and gaps.
 - Show money in Indian format (₹ lakh / crore). Be concise: short paragraphs or a few bullets.
 - Give concrete options: raise SIP, cut a spending category, extend a deadline, reduce a target.
-- You give educational guidance, not regulated investment advice. Do not recommend specific funds or stocks."""
+- You give educational guidance, not regulated investment advice. Do not recommend specific funds or stocks.
+- Do not estimate income tax or Section 80C. Point the user to the Tax save & reduce page for that."""
 
 TOOLS = [
     {
@@ -173,16 +228,21 @@ def _normalize(messages: list[dict]) -> list[dict]:
     return out
 
 
-def chat(messages: list[dict], plan: dict) -> str:
+def chat(messages: list[dict], plan: dict, language: str = "en") -> str:
+    reply, _source = chat_result(messages, plan, language)
+    return reply
+
+
+def chat_result(messages: list[dict], plan: dict, language: str = "en") -> tuple[str, str]:
     msgs: list[dict] = _normalize(messages)
     if not msgs:
-        return "Ask me anything about your plan."
+        return "Ask me anything about your plan.", "engine"
     if not ai_configured():
-        return answer_from_plan(msgs[-1]["content"], plan or {})
+        return answer_from_plan(msgs[-1]["content"], plan or {}), "engine"
     try:
         if provider() == "anthropic":
-            return _claude(msgs, plan)
-        return _gemini(msgs, plan)
+            return _claude(msgs, plan, language), "model"
+        return _gemini(msgs, plan, language), "model"
     except Exception as exc:
         text = str(exc).lower()
         auth_failed = any(
@@ -196,17 +256,17 @@ def chat(messages: list[dict], plan: dict) -> str:
             )
         )
         if auth_failed:
-            return answer_from_plan(msgs[-1]["content"], plan or {})
+            return answer_from_plan(msgs[-1]["content"], plan or {}), "engine"
         raise
 
 
-def _claude(msgs: list[dict], plan: dict) -> str:
+def _claude(msgs: list[dict], plan: dict, language: str = "en") -> str:
     from anthropic import Anthropic
 
     client = Anthropic()
     model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     for _ in range(8):
-        resp = client.messages.create(model=model, max_tokens=1200, system=SYSTEM, tools=TOOLS, messages=msgs)
+        resp = client.messages.create(model=model, max_tokens=1200, system=system_for(language), tools=TOOLS, messages=msgs)
         if resp.stop_reason != "tool_use":
             return "".join(b.text for b in resp.content if b.type == "text").strip()
 
@@ -265,11 +325,11 @@ def _gemini_models() -> list[str]:
     return models
 
 
-def _gemini_once(client, model: str, contents: list, plan: dict) -> str:
+def _gemini_once(client, model: str, contents: list, plan: dict, language: str = "en") -> str:
     from google.genai import types
 
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM,
+        system_instruction=system_for(language),
         tools=_gemini_tools(),
         temperature=0.4,
         max_output_tokens=2048,
@@ -291,7 +351,7 @@ def _gemini_once(client, model: str, contents: list, plan: dict) -> str:
     return "I couldn't finish that analysis. Try a more specific question."
 
 
-def _gemini(msgs: list[dict], plan: dict) -> str:
+def _gemini(msgs: list[dict], plan: dict, language: str = "en") -> str:
     from google import genai
     from google.genai import types
 
@@ -306,7 +366,7 @@ def _gemini(msgs: list[dict], plan: dict) -> str:
     last: Exception | None = None
     for model in _gemini_models():
         try:
-            return _gemini_once(client, model, list(base), plan)
+            return _gemini_once(client, model, list(base), plan, language)
         except Exception as exc:
             if _overloaded(exc):
                 last = exc

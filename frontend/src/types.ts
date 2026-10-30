@@ -5,8 +5,24 @@ export type GoalCategory =
 export type ExpenseKey = 'housing' | 'food' | 'transport' | 'utilities' | 'education' | 'lifestyle' | 'other';
 
 export type Page =
-  | 'dashboard' | 'profile' | 'goals' | 'timeline' | 'simulator' | 'gap'
+  | 'dashboard' | 'profile' | 'tax' | 'goals' | 'timeline' | 'simulator' | 'gap'
   | 'prioritizer' | 'investments' | 'compounding' | 'montecarlo' | 'news' | 'advisor' | 'settings';
+
+export type TaxRegime = 'old' | 'new' | 'unsure';
+
+export type MarginalRate = 0 | 5 | 20 | 30;
+
+export type ContributionKey =
+  | 'epf' | 'ppf' | 'elss' | 'lifeInsurance' | 'taxFd' | 'nsc'
+  | 'homeLoanPrincipal' | 'tuition' | 'ssy' | 'other80c';
+
+/** What the user has already put into Section 80C this financial year. */
+export interface TaxProfile {
+  regime: TaxRegime;
+  marginalRate: MarginalRate;
+  hasEligibleChild: boolean;
+  contributions: Record<ContributionKey, number>;
+}
 
 export type NewsScope = 'in' | 'global';
 
@@ -112,11 +128,17 @@ export type Patch =
   | { kind: 'shiftToCash'; amount: number }
   | { kind: 'prepay'; amount: number };
 
+/** A sentence the screen translates. Numbers stay in `v`; `{{₹name}}` formats rupees, `{{@name}}` looks up another message. */
+export interface Copy {
+  k: string;
+  v?: Record<string, string | number>;
+}
+
 export interface Fix {
   id: string;
   type: 'cut' | 'delay' | 'reduce' | 'stepup' | 'info' | 'warning';
-  title: string;
-  detail: string;
+  title: Copy;
+  detail: Copy;
   patch?: Patch;
 }
 
@@ -145,9 +167,11 @@ export interface GoalResult {
   ageAtGoal: number;
 }
 
+export type HealthPartId = 'savings' | 'emergency' | 'debt' | 'coverage';
+
 export interface Health {
   score: number;
-  parts: { label: string; value: number; max: number; known: boolean }[];
+  parts: { id: HealthPartId; value: number; max: number; known: boolean }[];
 }
 
 export interface ProjectionPoint { year: number; age: number; corpus: number; outflow: number }

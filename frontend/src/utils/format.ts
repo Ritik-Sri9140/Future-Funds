@@ -1,9 +1,14 @@
-export function inr(v: number): string {
+export function inr(v: number, units?: { lakh: string; crore: string }): string {
   if (!isFinite(v)) return '—';
   const sign = v < 0 ? '-' : '';
   const a = Math.abs(Math.round(v));
-  if (a >= 1e7) return `${sign}₹${(a / 1e7).toFixed(2)}Cr`;
-  if (a >= 1e5) return `${sign}₹${(a / 1e5).toFixed(1)}L`;
+  if (units) {
+    if (a >= 1e7) return `${sign}₹${(a / 1e7).toFixed(2)} ${units.crore}`;
+    if (a >= 1e5) return `${sign}₹${(a / 1e5).toFixed(1)} ${units.lakh}`;
+  } else {
+    if (a >= 1e7) return `${sign}₹${(a / 1e7).toFixed(2)}Cr`;
+    if (a >= 1e5) return `${sign}₹${(a / 1e5).toFixed(1)}L`;
+  }
   return `${sign}₹${a.toLocaleString('en-IN')}`;
 }
 

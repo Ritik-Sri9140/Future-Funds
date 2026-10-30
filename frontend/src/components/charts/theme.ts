@@ -3,13 +3,16 @@ import type { Tone } from '../ui/Card';
 import { inr } from '../../utils/format';
 
 export const COLORS = {
-  primary: '#4f46e5', green: '#10b981', red: '#ef4444', amber: '#f59e0b', blue: '#0ea5e9',
-  purple: '#8b5cf6', slate: '#94a3b8', pink: '#ec4899', teal: '#14b8a6',
+  primary: 'var(--c-primary)', green: 'var(--c-green)', red: 'var(--c-red)', amber: 'var(--c-amber)', blue: 'var(--c-blue)',
+  purple: 'var(--c-purple)', slate: 'var(--c-slate)', pink: 'var(--c-pink)', teal: 'var(--c-teal)', track: 'var(--c-track)',
 };
-export const PALETTE = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#ef4444'];
-export const ASSET_COLORS = { Equity: '#4f46e5', Debt: '#0ea5e9', Gold: '#f59e0b', FD: '#10b981' };
-export const AXIS = { fontSize: 12, fill: '#64748b' };
-export const GRID = '#e5e7eb';
+export const PALETTE = [
+  'var(--c-primary)', 'var(--c-blue)', 'var(--c-green)', 'var(--c-amber)', 'var(--c-pink)',
+  'var(--c-purple)', 'var(--c-teal)', 'var(--c-slate)', 'var(--c-red)',
+];
+export const ASSET_COLORS = { Equity: 'var(--c-primary)', Debt: 'var(--c-blue)', Gold: 'var(--c-gold)', FD: 'var(--c-green)' };
+export const AXIS = { fontSize: 12, fill: 'var(--c-axis)' };
+export const GRID = 'var(--c-grid)';
 
 export const money = (v: unknown) =>
   Array.isArray(v) ? `${inr(Number(v[0]))} – ${inr(Number(v[1]))}` : inr(Number(v));

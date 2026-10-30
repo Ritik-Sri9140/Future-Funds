@@ -1,14 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Assumptions, ChatMessage, CompletedGoal, ExpenseKey, Goal, GoalCategory, Page, Patch, Profile, SavedScenario, Scenario, Weights } from '../types';
+import { emptyTax, normalizeTax } from '../data/tax';
+import type { Assumptions, ChatMessage, CompletedGoal, ContributionKey, ExpenseKey, Goal, GoalCategory, Page, Patch, Profile, SavedScenario, Scenario, TaxProfile, Weights } from '../types';
 import { DEFAULT_ASSUMPTIONS, DEFAULT_SCENARIO, DEFAULT_WEIGHTS, EMPTY_PROFILE, SAMPLE_PROFILE, goalDefaults, makeGoal, sampleGoals } from '../data/templates';
 import { buildPlan } from '../engine/plan';
 import { applyPatchTo } from '../engine/patch';
 import { CURRENT_YEAR, targetYearHasPassed } from '../engine/finance';
+import { applyLocale, readLocale, translate, writeLocale, type Locale } from '../i18n/translate';
+import { readTheme, writeTheme, type ThemePreference } from '../theme';
 import { shiftLocalDay, uid } from '../utils/format';
 
 interface Data {
   profile: Profile;
+  tax: TaxProfile;
   goals: Goal[];
   completedGoals: CompletedGoal[];
   assumptions: Assumptions;
@@ -20,11 +24,17 @@ interface Data {
 
 interface State extends Data {
   page: Page;
+  theme: ThemePreference;
+  locale: Locale;
+  setTheme: (t: ThemePreference) => void;
+  setLocale: (l: Locale) => void;
   readNews: Record<string, string[]>;
   setPage: (p: Page) => void;
   markNewsRead: (day: string, id: string) => void;
   markDayRead: (day: string, ids: string[]) => void;
   setProfile: (p: Partial<Profile>) => void;
+  setTax: (p: Partial<TaxProfile>) => void;
+  setContribution: (k: ContributionKey, v: number) => void;
   setExpense: (k: ExpenseKey, v: number) => void;
   addGoal: (c: GoalCategory) => void;
   updateGoal: (id: string, p: Partial<Goal>) => void;
@@ -59,7 +69,7 @@ function pruneReads(read: Record<string, string[]>): Record<string, string[]> {
 const sample = (): Data => {
   const profile = structuredClone(SAMPLE_PROFILE);
   return {
-    profile, goals: sampleGoals(profile), assumptions: { ...DEFAULT_ASSUMPTIONS }, scenario: { ...DEFAULT_SCENARIO },
+    profile, tax: emptyTax(), goals: sampleGoals(profile), assumptions: { ...DEFAULT_ASSUMPTIONS }, scenario: { ...DEFAULT_SCENARIO },
     weights: { ...DEFAULT_WEIGHTS }, savedScenarios: [], chat: [], completedGoals: [],
   };
 };
@@ -68,9 +78,20 @@ export const useStore = create<State>()(
   persist(
     (set, get) => ({
       page: 'dashboard',
+      theme: readTheme(),
+      locale: readLocale(),
       readNews: {},
       ...sample(),
       setPage: (page) => set({ page }),
+      setTheme: (theme) => {
+        writeTheme(theme);
+        set({ theme });
+      },
+      setLocale: (locale) => {
+        writeLocale(locale);
+        applyLocale(locale);
+        set({ locale });
+      },
       markNewsRead: (day, id) => set((s) => {
         const ids = new Set(s.readNews[day] ?? []);
         ids.add(id);
@@ -81,6 +102,16 @@ export const useStore = create<State>()(
         return { readNews: pruneReads({ ...s.readNews, [day]: [...merged] }) };
       }),
       setProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
+      setTax: (p) => set((s) => {
+        const current = s.tax ?? emptyTax();
+        return {
+          tax: normalizeTax({ ...current, ...p, contributions: { ...current.contributions, ...(p.contributions ?? {}) } }),
+        };
+      }),
+      setContribution: (k, v) => set((s) => {
+        const current = s.tax ?? emptyTax();
+        return { tax: { ...current, contributions: { ...current.contributions, [k]: Math.max(0, v) } } };
+      }),
       setExpense: (k, v) => set((s) => ({ profile: { ...s.profile, expenses: { ...s.profile.expenses, [k]: v } } })),
       addGoal: (c) => {
         const { profile, assumptions } = get();
@@ -136,7 +167,7 @@ export const useStore = create<State>()(
       setWeights: (p) => set((s) => ({ weights: { ...s.weights, ...p } })),
       saveScenario: (name) =>
         set((s) => ({
-          savedScenarios: [...s.savedScenarios, { id: uid(), name: name || `Scenario ${s.savedScenarios.length + 1}`, scenario: { ...s.scenario }, createdAt: new Date().toISOString() }],
+          savedScenarios: [...s.savedScenarios, { id: uid(), name: name || translate(get().locale, 'simulator.defaultName', { n: s.savedScenarios.length + 1 }), scenario: { ...s.scenario }, createdAt: new Date().toISOString() }],
         })),
       loadScenario: (id) => {
         const sc = get().savedScenarios.find((x) => x.id === id);
@@ -154,6 +185,7 @@ export const useStore = create<State>()(
         const completed = Array.isArray(x.completedGoals) ? x.completedGoals.filter(isCompletedGoal) : [];
         set({
           profile: { ...EMPTY_PROFILE, ...x.profile, expenses: { ...EMPTY_PROFILE.expenses, ...(x.profile.expenses ?? {}) } },
+          tax: Object.prototype.hasOwnProperty.call(x, 'tax') ? normalizeTax(x.tax) : emptyTax(),
           goals: x.goals,
           completedGoals: completed,
           assumptions: { ...DEFAULT_ASSUMPTIONS, ...(x.assumptions ?? {}) },
@@ -167,7 +199,7 @@ export const useStore = create<State>()(
     {
       name: 'future-funds-v1',
       partialize: (s) => ({
-        profile: s.profile, goals: s.goals, completedGoals: s.completedGoals, assumptions: s.assumptions, scenario: s.scenario,
+        profile: s.profile, tax: s.tax, goals: s.goals, completedGoals: s.completedGoals, assumptions: s.assumptions, scenario: s.scenario,
         weights: s.weights, savedScenarios: s.savedScenarios, chat: s.chat, readNews: s.readNews,
       }),
     }

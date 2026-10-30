@@ -31,9 +31,11 @@ Frontend:
 ```bash
 cd frontend
 npm install
-npm run dev     # http://localhost:5173
+npm run dev     # http://localhost:5174
 ```
-Or both with Docker: `docker compose up --build`
+Or both with Docker: `docker compose up --build` at http://localhost:5173
+
+Do not point the host dev server at port 5173. That port is published by Docker, and Compose cannot start while it is taken.
 
 ## Design notes
 - All maths runs in the browser engine (`src/engine`) so every slider recalculates instantly.

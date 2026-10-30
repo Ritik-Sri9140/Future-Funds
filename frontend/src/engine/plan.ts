@@ -2,8 +2,7 @@ import type { Assumptions, ExpenseKey, Fix, Goal, GoalCategory, GoalResult, Plan
 import { CURRENT_YEAR, allocationFor, bufferedReturn, clamp, futureCost, fvLump, fvSip, portfolioStats, requiredSip } from './finance';
 import { simulateGoal } from './montecarlo';
 import { computeHealth } from './health';
-import { EXPENSE_LABELS } from '../data/templates';
-import { inr } from '../utils/format';
+import { copy } from '../i18n/translate';
 
 export const ESSENTIALS: GoalCategory[] = ['emergency', 'retirement'];
 
@@ -126,15 +125,15 @@ function computeFixes(plan: Plan, input: PlanInput, ctx: Ctx, em: number, emiRat
   const fixes: Fix[] = [];
 
   if (plan.surplus < 0)
-    fixes.push({ id: 'neg', type: 'warning', title: 'You spend more than you earn',
-      detail: `Expenses and EMIs exceed income by ${inr(-plan.surplus)}/mo. No goal can be funded until this is fixed.` });
+    fixes.push({ id: 'neg', type: 'warning', title: copy('fix.neg.title'),
+      detail: copy('fix.neg.detail', { amount: -plan.surplus }) });
   const monthlySpend = plan.expenses + plan.emis;
   if (monthlySpend > 0 && em < 6 && !input.goals.some((g) => g.category === 'emergency'))
-    fixes.push({ id: 'em', type: 'info', title: 'Add an emergency fund goal',
-      detail: `Your cash covers ${em.toFixed(1)} months. Target 6 months: ${inr(6 * monthlySpend)}.` });
+    fixes.push({ id: 'em', type: 'info', title: copy('fix.em.title'),
+      detail: copy('fix.em.detail', { months: em.toFixed(1), target: 6 * monthlySpend }) });
   if (plan.income > 0 && emiRatio > 0.4)
-    fixes.push({ id: 'emi', type: 'warning', title: 'EMIs are above 40% of income',
-      detail: `EMIs take ${Math.round(emiRatio * 100)}% of income. Prepay the costliest loan before taking new debt.` });
+    fixes.push({ id: 'emi', type: 'warning', title: copy('fix.emi.title'),
+      detail: copy('fix.emi.detail', { pct: Math.round(emiRatio * 100) }) });
 
   if (plan.gap > 0) {
     const eff = 1 + s.expenseChange / 100;
@@ -143,8 +142,8 @@ function computeFixes(plan: Plan, input: PlanInput, ctx: Ctx, em: number, emiRat
     const val = p.expenses[key];
     if (val > 0 && eff > 0) {
       const cut = Math.min(plan.gap / eff, val * 0.4);
-      fixes.push({ id: 'cut', type: 'cut', title: `Trim ${EXPENSE_LABELS[key].toLowerCase()} by ${inr(cut)}/mo`,
-        detail: `Frees ${inr(cut * eff)}/mo, covering ${Math.round(((cut * eff) / plan.gap) * 100)}% of the gap.`,
+      fixes.push({ id: 'cut', type: 'cut', title: copy('fix.cut.title', { expense: `expense.${key}`, amount: cut }),
+        detail: copy('fix.cut.detail', { freed: cut * eff, pct: Math.round(((cut * eff) / plan.gap) * 100) }),
         patch: { kind: 'expense', key, value: Math.round(val - cut) } });
     }
 
@@ -152,8 +151,8 @@ function computeFixes(plan: Plan, input: PlanInput, ctx: Ctx, em: number, emiRat
       const newTotal = input.goals.reduce((t, g) => t + evaluateGoal(g, ctx, { stepUp: 10 }).sip, 0);
       const save = plan.totalSip - newTotal;
       if (save > 0)
-        fixes.push({ id: 'stepup', type: 'stepup', title: 'Step up your SIPs 10% every year',
-          detail: `Starting SIPs drop by ${inr(save)}/mo because contributions grow with your salary.`,
+        fixes.push({ id: 'stepup', type: 'stepup', title: copy('fix.stepup.title'),
+          detail: copy('fix.stepup.detail', { amount: save }),
           patch: { kind: 'stepUp', value: 10 } });
     }
 
@@ -165,8 +164,8 @@ function computeFixes(plan: Plan, input: PlanInput, ctx: Ctx, em: number, emiRat
         for (let k = 1; k <= 30; k++) {
           const e = evaluateGoal(g, ctx, { year: g.targetYear + k });
           if (e.sip <= target + 1) {
-            fixes.push({ id: 'delay', type: 'delay', title: `Move ${g.name} to ${g.targetYear + k}`,
-              detail: `Pushing your lowest-priority goal back ${k} year${k > 1 ? 's' : ''} cuts its SIP from ${inr(weakest.sip)} to ${inr(e.sip)}/mo.`,
+            fixes.push({ id: 'delay', type: 'delay', title: copy('fix.delay.title', { name: g.name, category: g.category, year: g.targetYear + k }),
+              detail: copy(k > 1 ? 'fix.delay.detail.many' : 'fix.delay.detail.one', { years: k, from: weakest.sip, to: e.sip }),
               patch: { kind: 'goalYear', id: g.id, year: g.targetYear + k } });
             break;
           }
@@ -181,14 +180,14 @@ function computeFixes(plan: Plan, input: PlanInput, ctx: Ctx, em: number, emiRat
         // A fitted cost of ₹0 means the gap is bigger than this goal. Shrinking it
         // to nothing is not a fix the user can apply.
         if (cost >= 1000 && cost < g.costToday - 1000)
-          fixes.push({ id: 'reduce', type: 'reduce', title: `Reduce ${g.name} to ${inr(cost)}`,
-            detail: `A smaller target (in today's money) fits your budget without touching other goals.`,
+          fixes.push({ id: 'reduce', type: 'reduce', title: copy('fix.reduce.title', { name: g.name, category: g.category, cost }),
+            detail: copy('fix.reduce.detail'),
             patch: { kind: 'goalCost', id: g.id, cost } });
       }
     }
   } else if (plan.goals.length && -plan.gap > 1000) {
-    fixes.push({ id: 'spare', type: 'info', title: `${inr(-plan.gap)}/mo is unallocated`,
-      detail: 'Add it to retirement, build a bigger emergency buffer, or start a wealth-creation goal.' });
+    fixes.push({ id: 'spare', type: 'info', title: copy('fix.spare.title', { amount: -plan.gap }),
+      detail: copy('fix.spare.detail') });
   }
   return fixes;
 }

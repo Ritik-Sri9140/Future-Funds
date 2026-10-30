@@ -11,10 +11,13 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     plan: dict = Field(default_factory=dict)
+    language: Literal["en", "hi", "te", "ta", "bn", "mr", "kn", "ml", "gu", "or", "pa"] = "en"
 
 
 class ChatResponse(BaseModel):
     reply: str
+    source: Literal["engine", "model"] = "model"
+    provider: Literal["gemini", "anthropic"] = "gemini"
 
 
 class GoalCalcRequest(BaseModel):

@@ -24,6 +24,22 @@ def test_missing_gemini_key_answers_from_the_plan(monkeypatch):
     assert advisor.ai_configured() is False
 
 
+def test_tax_questions_are_not_estimated(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    reply = advisor.chat([{"role": "user", "content": "How much tax will Section 80C save me?"}], {"goals": []})
+    assert "Tax save & reduce" in reply
+    assert "does not estimate tax" in reply
+
+
+def test_tax_questions_are_not_estimated(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    reply = advisor.chat([{"role": "user", "content": "How much tax will Section 80C save me?"}], {"goals": []})
+    assert "Tax save & reduce" in reply
+    assert "does not estimate tax" in reply
+
+
 def test_anthropic_provider_can_be_selected(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")

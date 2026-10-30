@@ -1,6 +1,6 @@
-import type { ExpenseKey, Page, Patch, Plan } from '../types';
-import { EXPENSE_LABELS } from '../data/templates';
-import { inr, pct } from '../utils/format';
+import type { Copy, ExpenseKey, Page, Patch, Plan } from '../types';
+import { copy } from '../i18n/translate';
+import { pct } from '../utils/format';
 import { buildPlan, type PlanInput } from './plan';
 import { applyPatchTo } from './patch';
 
@@ -9,8 +9,8 @@ export const HEALTH_STRONG = 70;
 
 export interface HealthAction {
   id: string;
-  title: string;
-  detail: string;
+  title: Copy;
+  detail: Copy;
   /** Estimated rise in the 0–100 score. Zero when the option opens a page instead of applying a change. */
   points: number;
   patch?: Patch;
@@ -19,8 +19,8 @@ export interface HealthAction {
 
 interface Candidate {
   id: string;
-  title: string;
-  detail: string;
+  title: Copy;
+  detail: Copy;
   patch: Patch;
   group: string;
 }
@@ -86,8 +86,8 @@ function savingsCandidate(input: PlanInput, plan: Plan): Candidate | null {
   const newRate = (plan.surplus + (current - value) * eff) / plan.income;
   return {
     id: 'savings',
-    title: `Trim ${EXPENSE_LABELS[key].toLowerCase()} by ${inr(current - value)}/mo`,
-    detail: `Savings rate moves from ${pct(plan.savingsRate * 100)} to ${pct(newRate * 100)}.`,
+    title: copy('health.trim', { expense: `expense.${key}`, amount: current - value }),
+    detail: copy('health.trimDetail', { from: pct(plan.savingsRate * 100), to: pct(newRate * 100) }),
     patch: { kind: 'expense', key, value },
     group: `expense:${key}`,
   };
@@ -104,8 +104,8 @@ function emergencyCandidate(input: PlanInput, plan: Plan): Candidate | null {
   const after = (input.profile.cashSavings + amount) / spend;
   return {
     id: 'emergency',
-    title: `Move ${inr(amount)} into emergency cash`,
-    detail: `Cover goes from ${before.toFixed(1)} to ${after.toFixed(1)} months of spending. Net worth stays the same.`,
+    title: copy('health.moveCash', { amount }),
+    detail: copy('health.moveCashDetail', { before: before.toFixed(1), after: after.toFixed(1) }),
     patch: { kind: 'shiftToCash', amount },
     group: 'shiftToCash',
   };
@@ -122,8 +122,8 @@ function debtCandidate(input: PlanInput, plan: Plan): Candidate | null {
   const newEmi = left < 1 ? 0 : Math.round(input.profile.emis * (left / input.profile.liabilities));
   return {
     id: 'debt',
-    title: `Prepay ${inr(amount)} from spare cash`,
-    detail: `EMIs fall from ${inr(input.profile.emis)} to ${inr(newEmi)}/mo. A 6-month cash buffer stays in place.`,
+    title: copy('health.prepay', { amount }),
+    detail: copy('health.prepayDetail', { from: input.profile.emis, to: newEmi }),
     patch: { kind: 'prepay', amount },
     group: 'prepay',
   };
@@ -133,19 +133,19 @@ function fallbackAction(plan: Plan, hasGoals: boolean): HealthAction | null {
   const weak = plan.health.parts.filter((p) => p.known && p.value < p.max - 0.5);
   if (!weak.length) return null;
   const worst = weak.reduce((a, b) => (a.value / a.max <= b.value / b.max ? a : b));
-  if (worst.label === 'Savings rate') {
-    return { id: 'goto-savings', title: 'Update income and spending', detail: 'Saving a larger share of income raises this part of the score.', points: 0, page: 'profile' };
+  if (worst.id === 'savings') {
+    return { id: 'goto-savings', title: copy('health.gotoSavings'), detail: copy('health.gotoSavingsDetail'), points: 0, page: 'profile' };
   }
-  if (worst.label === 'Emergency fund') {
-    return { id: 'goto-cash', title: 'Add to cash savings', detail: 'This part fills up once cash covers 6 months of spending.', points: 0, page: 'profile' };
+  if (worst.id === 'emergency') {
+    return { id: 'goto-cash', title: copy('health.gotoCash'), detail: copy('health.gotoCashDetail'), points: 0, page: 'profile' };
   }
-  if (worst.label === 'Debt load') {
-    return { id: 'goto-debt', title: 'Lower your EMIs', detail: 'This part falls once EMIs take more than 40% of income.', points: 0, page: 'profile' };
+  if (worst.id === 'debt') {
+    return { id: 'goto-debt', title: copy('health.gotoDebt'), detail: copy('health.gotoDebtDetail'), points: 0, page: 'profile' };
   }
-  if (worst.label === 'Goal coverage') {
+  if (worst.id === 'coverage') {
     return hasGoals
-      ? { id: 'goto-gap', title: 'Close the monthly gap', detail: 'Funding more of the SIP each goal needs raises this part.', points: 0, page: 'gap' }
-      : { id: 'goto-goals', title: 'Add a goal to fund', detail: 'A goal gives this part of the score something to measure.', points: 0, page: 'goals' };
+      ? { id: 'goto-gap', title: copy('health.gotoGap'), detail: copy('health.gotoGapDetail'), points: 0, page: 'gap' }
+      : { id: 'goto-goals', title: copy('health.gotoGoals'), detail: copy('health.gotoGoalsDetail'), points: 0, page: 'goals' };
   }
   return null;
 }
